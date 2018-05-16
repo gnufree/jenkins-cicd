@@ -125,12 +125,12 @@ under the License.
     <server>
       <id>kkc</id>
       <username>admin</username>
-      <password>101010Pp</password>
+      <password>passwd</password>
     </server>
     <server>
       <id>kkc-snapshots</id>
       <username>admin</username>
-      <password>101010Pp</password>
+      <password>passwd</password>
     </server>
 
     <!-- Another sample, using keys to authenticate.
