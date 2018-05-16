@@ -1,0 +1,58 @@
+def label = "mypod-${UUID.randomUUID().toString()}"
+
+podTemplate(label: label, cloud: 'kubernetes', containers: [
+    containerTemplate(name: 'maven', image: 'harbor.kanche.com/cicd/slave-maven:v1', ttyEnabled: true, command: 'cat'),
+    containerTemplate(name: 'docker', image: 'harbor.kanche.com/cicd/slave-docker:v1', ttyEnabled: true, command: 'cat'),
+    containerTemplate(name: 'kubectl', image: 'harbor.kanche.com/cicd/slave-kubectl:v1', ttyEnabled: true, command: 'cat'),
+  ],
+  imagePullSecrets: [ 'myregistrykey' ],
+  serviceAccount: "jenkins",
+  nodeSelector: "ci:jenkins",
+  volumes: [
+      hostPathVolume(mountPath: '/var/run/docker.sock', hostPath: '/var/run/docker.sock'),
+      hostPathVolume(mountPath: '/root/.kube/config', hostPath: '/root/.kube/config'),
+      persistentVolumeClaim(claimName: 'pvc-jenkins-slave-maven', mountPath: '/home/jenkins/.m2')
+  ]
+  ) {
+    node(label) {
+        stage('checkout scm') {
+            git branch: "$brans", credentialsId: 'gitlab', url: "git@xxxxx.git" 
+            sh "git rev-parse --short HEAD > commit-id"
+            tag = readFile('commit-id').replace("\n", "").replace("\r", "")
+            def appName = "service-finance-sales"
+            registryHost = "harbor.kanche.com/kanche/"
+            def imageName = "${registryHost}${appName}:${tag}"
+            container('maven') {
+                stage('maven build') {
+                    sh 'mvn -Dmaven.test.failure.ignore clean package'
+                }
+            }
+            container('docker') {
+                stage('docker build') {
+                    withCredentials([[$class: 'UsernamePasswordMultiBinding',
+                    credentialsId: 'dockerhub',
+                    usernameVariable: 'DOCKER_HUB_USER',
+                    passwordVariable: 'DOCKER_HUB_PASSWORD']]) {
+                        sh "docker login -u ${DOCKER_HUB_USER} -p ${DOCKER_HUB_PASSWORD} ${registryHost}"
+                        sh "docker build -t ${imageName} -f docker/Dockerfile ."
+                    }
+                }
+                stage('docker push') {
+                    sh "docker push ${imageName}"
+                }
+            }
+            container('kubectl') {
+                stage('deploy') {
+                    // sh "sed 's#latest#'${tag}'#' k8s/deployment.yaml | kubectl apply -f -"
+                    // sh "kubectl -n ${namespace} rollout status deployment ${appName}"
+                    sh """
+                        helm install --namespace ${namespace} --name ${appName} --set image.tag="${tag}" charts/${appName}
+                    """
+                }
+                stage('get app status') {
+                    sh "kubectl -n ${namespace} rollout status deployment ${appName}"
+                }
+            }
+        }
+    }
+}

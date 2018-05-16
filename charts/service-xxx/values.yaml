@@ -1,0 +1,19 @@
+# Default values for service-finance-sales.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+imagePullSecrets: 
+  - myregistrykey
+image:
+  repository: service-xxx
+  tag: latest
+  pullPolicy: Always
+
+
+ingress:
+  enabled: false
+
+service:
+  type: ClusterIP
+  port: 8080
